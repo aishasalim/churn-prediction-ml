@@ -11,6 +11,6 @@ PyQtWebEngine==5.15.6
 requests==2.31.0
 scipy==1.13.1
 setuptools==69.5.1
-streamlit==1.27.2
+streamlit==1.39.0
 tenacity==8.2.3
 xgboost==2.1.1
