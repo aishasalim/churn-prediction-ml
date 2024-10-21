@@ -6,6 +6,7 @@ from openai import OpenAI
 import plotly.graph_objects as go
 from dotenv import load_dotenv
 import os
+import joblib
 
 load_dotenv()
 api_key = os.getenv('OPENAI_API_KEY')
@@ -107,26 +108,64 @@ client = OpenAI(
 
 
 def load_model(filename):
-    with open(filename, "rb") as file:
-        return pickle.load(file)
+    model = joblib.load(filename)
+    
+    # Initialize variables
+    model_name = filename.split('/')[-1].split('.')[0]  # Extract model name from filename
+    num_features = None
+    
+    # Check for scikit-learn models
+    if hasattr(model, 'n_features_in_'):
+        num_features = model.n_features_in_
+    elif hasattr(model, 'coef_'):
+        num_features = model.coef_.shape[1]
+    
+    # Check for XGBoost models
+    if hasattr(model, 'get_booster'):
+        booster = model.get_booster()
+        feature_names = booster.feature_names
+        if feature_names:
+            num_features = len(feature_names)
+        else:
+            num_features = booster.num_features()
+    
+    print(f"Loaded model '{model_name}' expects {num_features} features.")
+    return model
 
 
-xgboost_model = load_model('../models/xgb_model.pkl')
-random_forest_model = load_model('../models/rf_model.pkl')
-decision_tree_model = load_model('../models/dt_model.pkl')
-svm_model = load_model('../models/svm_model.pkl')
-knn_model = load_model('../models/knn_model.pkl')
-voting_classifier_model = load_model('../models/voting_classifier.pkl')
-xgboost_SMOTE_model = load_model('../models/xgboost-SMOTE.pkl')
-xgboost_featureEngineered_model = load_model('../models/xgboost-featureEngineered.pkl')
+# xgboost_model = load_model('../models/xgb_model.pkl')
+# random_forest_model = load_model('../models/rf_model.pkl')
+# decision_tree_model = load_model('../models/dt_model.pkl')
+# svm_model = load_model('../models/svm_model.pkl')
+# knn_model = load_model('../models/knn_model.pkl')
+# voting_classifier_model = load_model('../models/voting_classifier.pkl')
+# xgboost_SMOTE_model = load_model('../models/xgboost-SMOTE.pkl')
+# xgboost_featureEngineered_model = load_model('../models/xgboost-featureEngineered.pkl')
+best_lr_model = load_model('../models/best_lr_model.pkl')
+stacking_model = load_model('../models/stacking_model.pkl')
+gbc_model = load_model('../models/gbc_model.pkl')
+
 
 # this function will prepare input data for the model
 #  it will take user input data and make predictions with the models
 
 
 def prepare_input(credit_score, location, gender, age, tenure, balance,
-                  num_products, has_credit_card, is_active_member,
-                  estimated_salary):
+                  num_products, has_credit_card, is_active_member, estimated_salary):
+    
+    # Feature engineering: CLV, TenureAgeRatio, AgeGroup features
+    clv = (balance + estimated_salary) / (age + 1)  # Example calculation for CLV
+    tenure_age_ratio = tenure / (age + 1)
+
+    age_group_middle_age = 1 if 30 <= age < 50 else 0
+    age_group_senior = 1 if 50 <= age < 65 else 0
+    age_group_elderly = 1 if age >= 65 else 0
+
+    # Placeholder for additional missing features
+    # Replace 'MissingFeature1', 'MissingFeature2', 'MissingFeature3' with actual feature names
+    missing_feature1 = 0
+    missing_feature2 = 0
+    missing_feature3 = 0
 
     input_dict = {
         'CreditScore': credit_score,
@@ -141,21 +180,37 @@ def prepare_input(credit_score, location, gender, age, tenure, balance,
         'Geography_Germany': 1 if location == "Germany" else 0,
         'Geography_Spain': 1 if location == "Spain" else 0,
         'Gender_Male': 1 if gender == "Male" else 0,
-        'Gender_Female': 1 if gender == "Female" else 0
+        'Gender_Female': 1 if gender == "Female" else 0,
+        'CLV': clv,  # Adding CLV feature
+        'TenureAgeRatio': tenure_age_ratio,  # Adding TenureAgeRatio feature
+        'AgeGroup_MiddleAge': age_group_middle_age,  # Adding AgeGroup features
+        'AgeGroup_Senior': age_group_senior,
+        'AgeGroup_Elderly': age_group_elderly,
+        'MissingFeature1': missing_feature1,  # Placeholder feature
+        'MissingFeature2': missing_feature2,  # Placeholder feature
+        'MissingFeature3': missing_feature3,  # Placeholder feature
     }
 
     input_df = pd.DataFrame([input_dict])
     return input_df, input_dict
 
 
+
+
 def make_predictions(input_df, input_dict):
+    print("Input Features:", input_df.columns.tolist())
+    print("Number of Features:", input_df.shape[1])
+
     probabilities = {
-        'XGBoost': xgboost_model.predict_proba(input_df)[0][1],
-        'Random Forest': random_forest_model.predict_proba(input_df)[0][1],
-        'K-Nearest Neighbors': knn_model.predict_proba(input_df)[0][1]
+        'Logistic Regression': best_lr_model.predict_proba(input_df)[0][1],
+        'Stacking Classifier': stacking_model.predict_proba(input_df)[0][1],
+        'Gradient Boosting': gbc_model.predict_proba(input_df)[0][1]
     }
+    
     avg_probability = np.mean(list(probabilities.values()))
     return avg_probability, probabilities
+
+
 
 
 def explain_prediction(probability, input_dict, surname):
@@ -194,6 +249,8 @@ def explain_prediction(probability, input_dict, surname):
   Here are summary statistics for non-churned customers:
   {df[df['Exited'] == 0].describe()}
 
+  WORD RESTRICTION: 100-150 words!! IT IS VERY IMPORTANT. 
+
   - If the customer has over a 40% risk of churning, generate a 3 sentence explanation of why they are at risk of churning.
   - If the customer has less than a 40% risk of churning, generate a 3 sentence explanation of why they might not be at risk of churning.
 
@@ -204,7 +261,7 @@ def explain_prediction(probability, input_dict, surname):
 
     print("EXPLANATION PROMPT", prompt)
 
-    raw_response = client.chat.completions.create(model="llama-3.2-3b-preview",
+    raw_response = client.chat.completions.create(model="llama-3.1-8b-instant",
                                                   messages=[
                                                       {
                                                           "role": "user",
@@ -219,6 +276,8 @@ def generate_email(probability, input_dict, explanation, surname):
     prompt = f"""You are a manager at HS Bank. You are responsible for 
   ensuring customers stay with the bank and are incentivized with various offers.
 
+    WORD RESTRICTION: 250-350 words!! IT IS VERY IMPORTANT. 
+
   You noticed a customer named {surname} has a {round(probability * 100, 1)}% probability of churning.
 
   Here is the customer's information:
@@ -228,6 +287,8 @@ def generate_email(probability, input_dict, explanation, surname):
   {explanation}
 
   Generate an email to the customer based on their information, asking them to stay if they are at risk of churning, or offering them incentives so that they become more loyal to the bank.
+  Be specific about the incentives, and make sure to emphasize that the customer is not at risk of churning.
+  Email should be straight forward, facts only 250-350 words restriction. 
 
   Make sure to list out a set of incentives to stay based on their information, in bullet point format. Don't ever mention the probability of churning, or the machine learning model to the customer.
   """
