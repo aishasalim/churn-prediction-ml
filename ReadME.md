@@ -4,7 +4,7 @@ An end-to-end pipeline for customer churn prediction using Python, Groq, & ML. F
 
 ## Live Demo
 
-Check out the live application <a href="https://userchurnprediction.streamlit.app/"> LINK</a> 
+Check out the live application 🔗<a href="https://userchurnprediction.streamlit.app/" target="_blank">LINK</a>
 
 ---
 
