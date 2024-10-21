@@ -141,9 +141,9 @@ def load_model(filename):
 # voting_classifier_model = load_model('../models/voting_classifier.pkl')
 # xgboost_SMOTE_model = load_model('../models/xgboost-SMOTE.pkl')
 # xgboost_featureEngineered_model = load_model('../models/xgboost-featureEngineered.pkl')
-best_lr_model = load_model('../models/best_lr_model.pkl')
-stacking_model = load_model('../models/stacking_model.pkl')
-gbc_model = load_model('../models/gbc_model.pkl')
+best_lr_model = load_model('models/best_lr_model.pkl')
+stacking_model = load_model('models/stacking_model.pkl')
+gbc_model = load_model('models/gbc_model.pkl')
 
 
 # this function will prepare input data for the model
