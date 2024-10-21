@@ -108,10 +108,21 @@ client = OpenAI(
 
 
 def load_model(filename):
-    model = joblib.load(filename)
+    # Get the absolute path of the current script
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    # Construct the full path to the model
+    model_path = os.path.join(current_dir, filename)
+    
+    # Verify the model file exists
+    if not os.path.isfile(model_path):
+        raise FileNotFoundError(f"Model file not found at path: {model_path}")
+    
+    # Load the model
+    model = joblib.load(model_path)
     
     # Initialize variables
-    model_name = filename.split('/')[-1].split('.')[0]  # Extract model name from filename
+    model_name = os.path.splitext(os.path.basename(filename))[0]  # Extract model name without extension
     num_features = None
     
     # Check for scikit-learn models
@@ -131,6 +142,7 @@ def load_model(filename):
     
     print(f"Loaded model '{model_name}' expects {num_features} features.")
     return model
+
 
 
 # xgboost_model = load_model('../models/xgb_model.pkl')
