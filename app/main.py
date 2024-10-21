@@ -112,7 +112,7 @@ def load_model(filename):
     current_dir = os.path.dirname(os.path.abspath(__file__))
     
     # Construct the full path to the model
-    model_path = os.path.join(current_dir, filename)
+    model_path = os.path.join(current_dir, 'models', filename)
     
     # Verify the model file exists
     if not os.path.isfile(model_path):
@@ -143,6 +143,20 @@ def load_model(filename):
     print(f"Loaded model '{model_name}' expects {num_features} features.")
     return model
 
+def load_data(filename):
+    # Get the absolute path of the current script
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    # Construct the full path to the data file
+    data_path = os.path.join(current_dir, 'data', filename)
+    
+    # Verify the data file exists
+    if not os.path.isfile(data_path):
+        raise FileNotFoundError(f"Data file not found at path: {data_path}")
+    
+    # Load the data
+    df = pd.read_csv(data_path)
+    return df
 
 
 # xgboost_model = load_model('../models/xgb_model.pkl')
@@ -153,9 +167,9 @@ def load_model(filename):
 # voting_classifier_model = load_model('../models/voting_classifier.pkl')
 # xgboost_SMOTE_model = load_model('../models/xgboost-SMOTE.pkl')
 # xgboost_featureEngineered_model = load_model('../models/xgboost-featureEngineered.pkl')
-best_lr_model = load_model('models/best_lr_model.pkl')
-stacking_model = load_model('models/stacking_model.pkl')
-gbc_model = load_model('models/gbc_model.pkl')
+best_lr_model = load_model('best_lr_model.pkl')
+stacking_model = load_model('stacking_model.pkl')
+gbc_model = load_model('gbc_model.pkl')
 
 
 # this function will prepare input data for the model
@@ -321,7 +335,7 @@ def generate_email(probability, input_dict, explanation, surname):
 # =========== UI ===========
 st.title("Customer Churn Prediction")
 
-df = pd.read_csv("../data/churn.csv")
+df = load_data('churn.csv')
 
 customers = [
     f"{row['CustomerId']} - {row['Surname']}" for _, row in df.iterrows()
