@@ -1,6 +1,6 @@
 # 🚀 Customer Churn Prediction
 
-An end-to-end pipeline for customer churn prediction using Python, Groq, & ML. Features data cleaning, 5 ML models, hyperparameter tuning, and a Streamlit web app for real-time inference! 📊🔍
+An end-to-end pipeline for customer churn prediction and fraud transactions prediction using Python, Groq, & ML. Features data cleaning, 5 ML models, hyperparameter tuning, and a Streamlit web app for real-time inference! 📊🔍
 
 ## Live Demo
 

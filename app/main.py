@@ -455,6 +455,17 @@ xgbc_model_fraud = load_model('XGBClassifier.pkl')
 
 fraud_train = load_data('balanced_fraud_sample.csv')
 
+def load_scaler(filename):
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    scaler_path = os.path.join(current_dir, 'models', filename)
+    
+    if not os.path.isfile(scaler_path):
+        raise FileNotFoundError(f"Scaler file not found at path: {scaler_path}")
+    
+    scaler = joblib.load(scaler_path)
+    print(f"Loaded scaler '{filename}'.")
+    return scaler
+
 # Preprocess the training data to get the same feature set as used in models
 def preprocess_fraud_data(df):
     # Handle categorical variables: Only 'category' and 'gender'
@@ -485,7 +496,7 @@ def preprocess_fraud_data(df):
     
     if existing_numerical_cols:
         # Load the saved scaler
-        scaler = load_model('scaler_fraud.pkl')
+        scaler = load_scaler('scaler_fraud.pkl')
         df_encoded[existing_numerical_cols] = scaler.transform(df_encoded[existing_numerical_cols])
     
     return df_encoded
@@ -494,6 +505,24 @@ X_fraud_encoded = preprocess_fraud_data(fraud_train).drop('is_fraud', axis=1)
 y_fraud = fraud_train['is_fraud']
 
 def prepare_transaction_input(amt, category, gender, state, city, job, trans_date_trans_time, merch_lat, merch_long):
+    """
+    Prepares input data for transaction fraud prediction models.
+    
+    Parameters:
+        amt (float): Transaction amount.
+        category (str): Transaction category.
+        gender (str): Gender of the individual.
+        state (str): State where the transaction occurred.
+        city (str): City where the transaction occurred.
+        job (str): Job title of the individual.
+        trans_date_trans_time (datetime or str): Transaction datetime.
+        merch_lat (float): Merchant latitude.
+        merch_long (float): Merchant longitude.
+    
+    Returns:
+        input_df_encoded (pd.DataFrame): Preprocessed and scaled input data.
+        input_dict (dict): Dictionary of input features.
+    """
     # Convert trans_date_trans_time to datetime if it's a string
     if isinstance(trans_date_trans_time, str):
         trans_date_trans_time = pd.to_datetime(trans_date_trans_time)
@@ -547,7 +576,9 @@ def prepare_transaction_input(amt, category, gender, state, city, job, trans_dat
     
     # Reorder columns to match model's expected features
     input_df_encoded = input_df_encoded[model_features]
-    
+
+    print("Prepared Input DataFrame:")
+    print(input_df_encoded.head())
     return input_df_encoded, input_dict
 
 def make_transaction_predictions(input_df):
@@ -579,10 +610,13 @@ def make_transaction_predictions(input_df):
         
         # Predict probability
         y_pred = model.predict_proba(model_input_df)[0][1]
+        print(f"Model: {name}, Predicted Fraud Probability: {y_pred}")
         probabilities[name] = y_pred
     
     avg_probability = np.mean(list(probabilities.values()))
+    print(f"Average Fraud Probability: {avg_probability}")
     return avg_probability, probabilities
+
 
 def get_feature_importances(models, feature_names):
     """
@@ -699,6 +733,9 @@ Don't mention the probability of being fraudulent, or the machine learning model
 # Tab 2: Transaction Fraud Prediction
 # =======================
 
+# =======================
+# Tab 2: Transaction Fraud Prediction
+# =======================
 with tabs[1]:
     st.header("Transaction Fraud Prediction")
     
@@ -808,7 +845,6 @@ with tabs[1]:
                 # Add more features as needed based on included_columns
             
             # Prepare input data
-            selected_transaction = fraud_data.loc[transaction_index]
             trans_date_trans_time = selected_transaction.get('trans_date_trans_time', pd.Timestamp.now())
 
             input_df, input_dict = prepare_transaction_input(
