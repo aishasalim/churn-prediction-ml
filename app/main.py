@@ -453,7 +453,7 @@ xgbc_model_fraud = load_model('XGBClassifier.pkl')
 # Load Training Data for Fraud Models
 # =====================
 
-fraud_train = load_data('balanced_fraud_sample.csv')
+fraud_train = load_data('fraudTest.csv')
 
 # Preprocess the training data to get the same feature set as used in models
 def preprocess_fraud_data(df):
@@ -584,14 +584,126 @@ def make_transaction_predictions(input_df):
     avg_probability = np.mean(list(probabilities.values()))
     return avg_probability, probabilities
 
+def get_feature_importances(models, feature_names):
+    """
+    Aggregates feature importances from multiple models.
+
+    Parameters:
+        models (list): List of trained models.
+        feature_names (list): List of feature names.
+
+    Returns:
+        dict: Average feature importances.
+    """
+    importances = {feature: 0 for feature in feature_names}
+    
+    for model in models:
+        if hasattr(model, 'feature_importances_'):
+            model_importances = model.feature_importances_
+            for feature, importance in zip(feature_names, model_importances):
+                importances[feature] += importance
+        elif hasattr(model, 'get_booster'):
+            booster = model.get_booster()
+            model_importances = booster.get_score(importance_type='weight')
+            for feature, importance in model_importances.items():
+                if feature in importances:
+                    importances[feature] += importance
+                else:
+                    importances[feature] = importance
+    # Average importances
+    for feature in importances:
+        importances[feature] /= len(models)
+    
+    # Sort by importance
+    sorted_importances = dict(sorted(importances.items(), key=lambda item: item[1], reverse=True))
+    
+    # Get top 10
+    top_10_importances = dict(list(sorted_importances.items())[:10])
+    
+    return top_10_importances
+
+def explain_transaction(probability, input_dict, transaction_id):
+    """
+    Generates a natural language explanation for a transaction's fraud prediction.
+
+    Parameters:
+        probability (float): Predicted probability of fraud.
+        input_dict (dict): Dictionary of input features.
+        transaction_id (str/int): Unique identifier for the transaction.
+
+    Returns:
+        str: Generated explanation.
+    """
+    # Get feature importances
+    models = [dtc_model_fraud, rfc_model_fraud, xgbc_model_fraud]
+    feature_names = X_fraud_encoded.columns
+    top_features = get_feature_importances(models, feature_names)
+    
+    # Create feature importance table
+    feature_importance_table = "Feature | Importance\n-----------------------\n"
+    for feature, importance in top_features.items():
+        feature_importance_table += f"{feature} | {importance:.6f}\n"
+    
+    # Prepare summary statistics
+    fraudulent_stats = fraud_train[fraud_train['is_fraud'] == 1].describe().to_dict()
+    non_fraudulent_stats = fraud_train[fraud_train['is_fraud'] == 0].describe().to_dict()
+    
+    # Construct the prompt
+    prompt = f"""You are an expert data scientist at a bank, specializing in 
+interpreting and explaining predictions of machine learning models.
+
+Your machine learning model has predicted that transaction ID {transaction_id} has a 
+{round(probability * 100, 1)}% probability of being fraudulent, based on the information provided below.
+
+Here is the transaction's information:
+{input_dict}
+
+Here are the machine learning model's top 10 most important features for predicting fraud:
+
+{feature_importance_table}
+
+Here are summary statistics for fraudulent transactions:
+{fraud_train[fraud_train['is_fraud'] == 1].describe()}
+
+Here are summary statistics for non-fraudulent transactions:
+{fraud_train[fraud_train['is_fraud'] == 0].describe()}
+
+WORD RESTRICTION: 150-200 words!! IT IS VERY IMPORTANT. DO NOT INCLUDE ID OR ANY OTHER SENSITIVE INFORMATION
+
+- If the transaction has over a 40% probability of being fraudulent, generate a 3 sentence explanation of why it is likely fraudulent.
+- If the transaction has less than a 40% probability of being fraudulent, generate a 3 sentence explanation of why it might not be fraudulent.
+
+Your explanation should be based on the transaction's information, the summary statistics of fraudulent and non-fraudulent transactions, and the feature importances provided.
+
+Don't mention the probability of being fraudulent, or the machine learning model, or say anything like "Based on the machine learning model's prediction and top 10 most important features", just explain the prediction.
+"""
+
+    print("EXPLANATION PROMPT", prompt)
+
+    try:
+        raw_response = client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[
+                {
+                    "role": "user",
+                    "content": prompt
+                },
+            ]
+        )
+        return raw_response.choices[0].message.content
+    except Exception as e:
+        print(f"Error generating explanation: {e}")
+        return "Unable to generate an explanation at this time."
+
 # =======================
 # Tab 2: Transaction Fraud Prediction
 # =======================
+
 with tabs[1]:
     st.header("Transaction Fraud Prediction")
     
     # Load Fraud Data
-    fraud_data = load_data('balanced_fraud_sample.csv')
+    fraud_data = load_data('fraudTest.csv')
     fraud_data.reset_index(inplace=True)  # Ensure the index is a column if needed
     
     # Proceed only if data is loaded
@@ -626,42 +738,71 @@ with tabs[1]:
             col1, col2 = st.columns(2)
             with col1:
                 if 'amt' in included_columns:
-                    amt = st.number_input("Transaction Amount", min_value=0.0, value=float(selected_transaction['amt']))
+                    amt = st.number_input(
+                        "Transaction Amount",
+                        min_value=0.0,
+                        value=float(selected_transaction['amt'])
+                    )
                 if 'category' in included_columns:
                     try:
                         category_index = list(fraud_data['category'].unique()).index(selected_transaction['category'])
-                        category = st.selectbox("Category", fraud_data['category'].unique(), index=category_index)
+                        category = st.selectbox(
+                            "Category",
+                            fraud_data['category'].unique(),
+                            index=category_index
+                        )
                     except ValueError:
                         category = st.selectbox("Category", fraud_data['category'].unique())
                 if 'gender' in included_columns:
                     try:
                         gender_index = list(fraud_data['gender'].unique()).index(selected_transaction['gender'])
-                        gender = st.selectbox("Gender", fraud_data['gender'].unique(), index=gender_index)
+                        gender = st.selectbox(
+                            "Gender",
+                            fraud_data['gender'].unique(),
+                            index=gender_index
+                        )
                     except ValueError:
                         gender = st.selectbox("Gender", fraud_data['gender'].unique())
                 if 'state' in included_columns:
                     try:
                         state_index = list(fraud_data['state'].unique()).index(selected_transaction['state'])
-                        state = st.selectbox("State", fraud_data['state'].unique(), index=state_index)
+                        state = st.selectbox(
+                            "State",
+                            fraud_data['state'].unique(),
+                            index=state_index
+                        )
                     except ValueError:
                         state = st.selectbox("State", fraud_data['state'].unique())
             
             with col2:
                 if 'age' in included_columns:
                     try:
-                        age = st.number_input("Age", min_value=18, max_value=100, value=int(selected_transaction['age']))
+                        age = st.number_input(
+                            "Age",
+                            min_value=18,
+                            max_value=100,
+                            value=int(selected_transaction['age'])
+                        )
                     except ValueError:
                         age = st.number_input("Age", min_value=18, max_value=100, value=30)
                 if 'city' in included_columns:
                     try:
                         city_index = list(fraud_data['city'].unique()).index(selected_transaction['city'])
-                        city = st.selectbox("City", fraud_data['city'].unique(), index=city_index)
+                        city = st.selectbox(
+                            "City",
+                            fraud_data['city'].unique(),
+                            index=city_index
+                        )
                     except ValueError:
                         city = st.selectbox("City", fraud_data['city'].unique())
                 if 'job' in included_columns:
                     try:
                         job_index = list(fraud_data['job'].unique()).index(selected_transaction['job'])
-                        job = st.selectbox("Job", fraud_data['job'].unique(), index=job_index)
+                        job = st.selectbox(
+                            "Job",
+                            fraud_data['job'].unique(),
+                            index=job_index
+                        )
                     except ValueError:
                         job = st.selectbox("Job", fraud_data['job'].unique())
                 # Add more features as needed based on included_columns
@@ -682,9 +823,12 @@ with tabs[1]:
                 merch_long=selected_transaction['merch_long']
             )
 
-            
             # Make predictions
             avg_probability, probabilities = make_transaction_predictions(input_df)
+            
+            # Generate explanation
+            transaction_id = selected_transaction['trans_num']  # Assuming 'trans_num' is unique
+            explanation = explain_transaction(avg_probability, input_dict, transaction_id)
             
             # Display the results
             st.markdown("---")
@@ -696,3 +840,8 @@ with tabs[1]:
             # Display probabilities from each model
             fig_probs = create_model_probability_chart(probabilities)
             st.plotly_chart(fig_probs, use_container_width=True)
+            
+            # Display explanation
+            st.markdown("---")
+            st.subheader("Explanation of Prediction")
+            st.markdown(explanation)
