@@ -453,7 +453,7 @@ xgbc_model_fraud = load_model('XGBClassifier.pkl')
 # Load Training Data for Fraud Models
 # =====================
 
-fraud_train = load_data('fraudTest.csv')
+fraud_train = load_data('balanced_fraud_sample.csv')
 
 # Preprocess the training data to get the same feature set as used in models
 def preprocess_fraud_data(df):
@@ -703,7 +703,7 @@ with tabs[1]:
     st.header("Transaction Fraud Prediction")
     
     # Load Fraud Data
-    fraud_data = load_data('fraudTest.csv')
+    fraud_data = load_data('balanced_fraud_sample.csv')
     fraud_data.reset_index(inplace=True)  # Ensure the index is a column if needed
     
     # Proceed only if data is loaded
