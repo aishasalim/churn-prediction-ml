@@ -7,6 +7,9 @@ import plotly.graph_objects as go
 from dotenv import load_dotenv
 import os
 import joblib
+import matplotlib.pyplot as plt
+import seaborn as sns
+from datetime import datetime
 
 load_dotenv()
 api_key = os.getenv('OPENAI_API_KEY')
@@ -159,14 +162,6 @@ def load_data(filename):
     return df
 
 
-# xgboost_model = load_model('../models/xgb_model.pkl')
-# random_forest_model = load_model('../models/rf_model.pkl')
-# decision_tree_model = load_model('../models/dt_model.pkl')
-# svm_model = load_model('../models/svm_model.pkl')
-# knn_model = load_model('../models/knn_model.pkl')
-# voting_classifier_model = load_model('../models/voting_classifier.pkl')
-# xgboost_SMOTE_model = load_model('../models/xgboost-SMOTE.pkl')
-# xgboost_featureEngineered_model = load_model('../models/xgboost-featureEngineered.pkl')
 best_lr_model = load_model('best_lr_model.pkl')
 stacking_model = load_model('stacking_model.pkl')
 gbc_model = load_model('gbc_model.pkl')
@@ -221,8 +216,6 @@ def prepare_input(credit_score, location, gender, age, tenure, balance,
     return input_df, input_dict
 
 
-
-
 def make_predictions(input_df, input_dict):
     print("Input Features:", input_df.columns.tolist())
     print("Number of Features:", input_df.shape[1])
@@ -235,8 +228,6 @@ def make_predictions(input_df, input_dict):
     
     avg_probability = np.mean(list(probabilities.values()))
     return avg_probability, probabilities
-
-
 
 
 def explain_prediction(probability, input_dict, surname):
@@ -333,110 +324,375 @@ def generate_email(probability, input_dict, explanation, surname):
 
 
 # =========== UI ===========
-st.title("Customer Churn Prediction")
+st.title("Banking Analytics Dashboard")
 
-df = load_data('churn.csv')
+# Create Tabs
+tabs = st.tabs(["Customer Churn Prediction", "Fraud Analysis"])
 
-customers = [
-    f"{row['CustomerId']} - {row['Surname']}" for _, row in df.iterrows()
-]
+# =======================
+# Tab 1: Customer Churn Prediction
+# =======================
+with tabs[0]:
+    df = load_data('churn.csv')
 
-selected_customer_option = st.selectbox("Select a customer", customers)
+    customers = [
+        f"{row['CustomerId']} - {row['Surname']}" for _, row in df.iterrows()
+    ]
 
-if selected_customer_option:
-    selected_customer_id = int(selected_customer_option.split(" - ")[0])
-    selected_customer_surname = selected_customer_option.split(" - ")[1]
-    selected_customer = df.loc[df["CustomerId"] ==
-                               selected_customer_id].iloc[0]
+    selected_customer_option = st.selectbox("Select a customer", customers)
 
-    # Prepare default input values from selected customer
-    credit_score_default = int(selected_customer['CreditScore'])
-    location_default = selected_customer['Geography']
-    gender_default = selected_customer['Gender']
-    age_default = int(selected_customer['Age'])
-    tenure_default = int(selected_customer['Tenure'])
-    balance_default = float(selected_customer['Balance'])
-    num_products_default = int(selected_customer['NumOfProducts'])
-    has_credit_card_default = bool(selected_customer['HasCrCard'])
-    is_active_member_default = bool(selected_customer['IsActiveMember'])
-    estimated_salary_default = float(selected_customer['EstimatedSalary'])
+    if selected_customer_option:
+        selected_customer_id = int(selected_customer_option.split(" - ")[0])
+        selected_customer_surname = selected_customer_option.split(" - ")[1]
+        selected_customer = df.loc[df["CustomerId"] ==
+                                selected_customer_id].iloc[0]
 
-    # Prepare input data for prediction
-    input_df, input_dict = prepare_input(
-        credit_score_default, location_default, gender_default, age_default,
-        tenure_default, balance_default, num_products_default,
-        has_credit_card_default, is_active_member_default,
-        estimated_salary_default)
+        # Prepare default input values from selected customer
+        credit_score_default = int(selected_customer['CreditScore'])
+        location_default = selected_customer['Geography']
+        gender_default = selected_customer['Gender']
+        age_default = int(selected_customer['Age'])
+        tenure_default = int(selected_customer['Tenure'])
+        balance_default = float(selected_customer['Balance'])
+        num_products_default = int(selected_customer['NumOfProducts'])
+        has_credit_card_default = bool(selected_customer['HasCrCard'])
+        is_active_member_default = bool(selected_customer['IsActiveMember'])
+        estimated_salary_default = float(selected_customer['EstimatedSalary'])
 
-    # Make predictions
-    avg_probability, probabilities = make_predictions(input_df, input_dict)
+        # Prepare input data for prediction
+        input_df, input_dict = prepare_input(
+            credit_score_default, location_default, gender_default, age_default,
+            tenure_default, balance_default, num_products_default,
+            has_credit_card_default, is_active_member_default,
+            estimated_salary_default)
 
-    # Collect user inputs
-    st.markdown("---")
-    st.header("Customer Details")
-    col1, col2 = st.columns(2)
-    with col1:
-        credit_score = st.number_input("Credit Score",
-                                       min_value=300,
-                                       max_value=850,
-                                       value=credit_score_default)
-        location = st.selectbox("Location", ["Spain", "France", "Germany"],
-                                index=["Spain", "France",
-                                       "Germany"].index(location_default))
-        gender = st.radio("Gender", ["Male", "Female"],
-                          index=0 if gender_default == 'Male' else 1)
-        age = st.number_input("Age",
-                              min_value=18,
-                              max_value=100,
-                              value=age_default)
-        tenure = st.number_input("Tenure (years)",
-                                 min_value=0,
-                                 max_value=50,
-                                 value=tenure_default)
-    with col2:
-        balance = st.number_input("Balance",
-                                  min_value=0.0,
-                                  value=balance_default)
-        num_products = st.number_input("Number of Products",
-                                       min_value=1,
-                                       max_value=10,
-                                       value=num_products_default)
-        has_credit_card = st.checkbox("Has Credit Card",
-                                      value=has_credit_card_default)
-        is_active_member = st.checkbox("Is Active Member",
-                                       value=is_active_member_default)
-        estimated_salary = st.number_input("Estimated Salary",
-                                           min_value=0.0,
-                                           value=estimated_salary_default)
+        # Make predictions
+        avg_probability, probabilities = make_predictions(input_df, input_dict)
 
-    # Update predictions based on user inputs
-    input_df, input_dict = prepare_input(credit_score, location, gender, age,
-                                         tenure, balance, num_products,
-                                         has_credit_card, is_active_member,
-                                         estimated_salary)
-    avg_probability, probabilities = make_predictions(input_df, input_dict)
+        # Collect user inputs
+        st.markdown("---")
+        st.header("Customer Details")
+        col1, col2 = st.columns(2)
+        with col1:
+            credit_score = st.number_input("Credit Score",
+                                        min_value=300,
+                                        max_value=850,
+                                        value=credit_score_default)
+            location = st.selectbox("Location", ["Spain", "France", "Germany"],
+                                    index=["Spain", "France",
+                                        "Germany"].index(location_default))
+            gender = st.radio("Gender", ["Male", "Female"],
+                            index=0 if gender_default == 'Male' else 1)
+            age = st.number_input("Age",
+                                min_value=18,
+                                max_value=100,
+                                value=age_default)
+            tenure = st.number_input("Tenure (years)",
+                                    min_value=0,
+                                    max_value=50,
+                                    value=tenure_default)
+        with col2:
+            balance = st.number_input("Balance",
+                                    min_value=0.0,
+                                    value=balance_default)
+            num_products = st.number_input("Number of Products",
+                                        min_value=1,
+                                        max_value=10,
+                                        value=num_products_default)
+            has_credit_card = st.checkbox("Has Credit Card",
+                                        value=has_credit_card_default)
+            is_active_member = st.checkbox("Is Active Member",
+                                        value=is_active_member_default)
+            estimated_salary = st.number_input("Estimated Salary",
+                                            min_value=0.0,
+                                            value=estimated_salary_default)
 
-    # Update the plots
-    st.markdown("---")
-    col1, col2 = st.columns(2)
-    with col1:
-        fig = create_gauge_chart(avg_probability)
-        st.plotly_chart(fig, use_container_width=True)
-        st.write(
-            f'The customer has a {avg_probability:.2%} probability of churning.'
-        )
-    with col2:
-        fig_probs = create_model_probability_chart(probabilities)
-        st.plotly_chart(fig_probs, use_container_width=True)
+        # Update predictions based on user inputs
+        input_df, input_dict = prepare_input(credit_score, location, gender, age,
+                                            tenure, balance, num_products,
+                                            has_credit_card, is_active_member,
+                                            estimated_salary)
+        avg_probability, probabilities = make_predictions(input_df, input_dict)
 
-    # Explanation and email generation
-    explanation = explain_prediction(avg_probability, input_dict,
-                                     selected_customer["Surname"])
-    st.markdown("---")
-    st.subheader("Explanation of Prediction")
-    st.markdown(explanation)
-    email = generate_email(avg_probability, input_dict, explanation,
-                           selected_customer["Surname"])
-    st.markdown("---")
-    st.subheader("Personalized Email")
-    st.markdown(email)
+        # Update the plots
+        st.markdown("---")
+        col1, col2 = st.columns(2)
+        with col1:
+            fig = create_gauge_chart(avg_probability)
+            st.plotly_chart(fig, use_container_width=True)
+            st.write(
+                f'The customer has a {avg_probability:.2%} probability of churning.'
+            )
+        with col2:
+            fig_probs = create_model_probability_chart(probabilities)
+            st.plotly_chart(fig_probs, use_container_width=True)
+
+        # Explanation and email generation
+        explanation = explain_prediction(avg_probability, input_dict,
+                                        selected_customer["Surname"])
+        st.markdown("---")
+        st.subheader("Explanation of Prediction")
+        st.markdown(explanation)
+        email = generate_email(avg_probability, input_dict, explanation,
+                            selected_customer["Surname"])
+        st.markdown("---")
+        st.subheader("Personalized Email")
+        st.markdown(email)
+
+
+# =======================
+# Tab 2: Transaction Fraud Prediction
+# =======================
+
+# Load Fraud Detection Models
+dtc_model_fraud = load_model('DecisionTreeClassifier.pkl')
+rfc_model_fraud = load_model('RandomForestClassifier.pkl')
+xgbc_model_fraud = load_model('XGBClassifier.pkl')
+
+# =====================
+# Load Training Data for Fraud Models
+# =====================
+
+fraud_train = load_data('balanced_fraud_sample.csv')
+
+# Preprocess the training data to get the same feature set as used in models
+def preprocess_fraud_data(df):
+    # Handle categorical variables: Only 'category' and 'gender'
+    categorical_columns = ['category', 'gender']
+    df_encoded = pd.get_dummies(df, columns=categorical_columns, drop_first=True)
+    
+    # Extract datetime components if 'trans_date_trans_time' exists
+    if 'trans_date_trans_time' in df_encoded.columns:
+        df_encoded['trans_date_trans_time'] = pd.to_datetime(df_encoded['trans_date_trans_time'])
+        df_encoded['trans_year'] = df_encoded['trans_date_trans_time'].dt.year
+        df_encoded['trans_month'] = df_encoded['trans_date_trans_time'].dt.month
+        df_encoded['trans_day'] = df_encoded['trans_date_trans_time'].dt.day
+        df_encoded['trans_hour'] = df_encoded['trans_date_trans_time'].dt.hour
+        
+        # Drop the original datetime column
+        df_encoded = df_encoded.drop('trans_date_trans_time', axis=1)
+    
+    # Drop unnecessary columns
+    columns_to_drop = ['Unnamed: 0', 'trans_num', 'dob', 'cc_num', 'first', 'last', 
+                       'street', 'city', 'state', 'zip', 'lat', 'long', 
+                       'merchant', 'job', 'trans_date_trans_time']
+    df_encoded = df_encoded.drop(columns=columns_to_drop, errors='ignore')
+    
+    # Scale numerical columns using the pre-fitted scaler
+    numerical_cols = ['amt', 'merch_lat', 'merch_long', 'unix_time', 
+                      'trans_year', 'trans_month', 'trans_day', 'trans_hour']
+    existing_numerical_cols = [col for col in numerical_cols if col in df_encoded.columns]
+    
+    if existing_numerical_cols:
+        # Load the saved scaler
+        scaler = load_model('scaler_fraud.pkl')
+        df_encoded[existing_numerical_cols] = scaler.transform(df_encoded[existing_numerical_cols])
+    
+    return df_encoded
+
+X_fraud_encoded = preprocess_fraud_data(fraud_train).drop('is_fraud', axis=1)
+y_fraud = fraud_train['is_fraud']
+
+def prepare_transaction_input(amt, category, gender, state, city, job, trans_date_trans_time, merch_lat, merch_long):
+    # Convert trans_date_trans_time to datetime if it's a string
+    if isinstance(trans_date_trans_time, str):
+        trans_date_trans_time = pd.to_datetime(trans_date_trans_time)
+    
+    # Ensure trans_date_trans_time is a datetime object
+    if not isinstance(trans_date_trans_time, datetime):
+        raise ValueError("trans_date_trans_time must be a datetime object or a string representing a datetime.")
+    
+    # Calculate unix_time from trans_date_trans_time
+    unix_time = int(trans_date_trans_time.timestamp())
+    
+    # Create input dictionary with required features
+    input_dict = {
+        'amt': amt,
+        'category': category,
+        'gender': gender,
+        'state': state,
+        'city': city,
+        'job': job,
+        'merch_lat': merch_lat,
+        'merch_long': merch_long,
+        'unix_time': unix_time
+    }
+    
+    # Convert input_dict to DataFrame
+    input_df = pd.DataFrame([input_dict])
+    
+    # One-hot encode categorical variables
+    categorical_columns = ['category', 'gender']
+    input_df_encoded = pd.get_dummies(input_df, columns=categorical_columns, drop_first=True)
+    
+    # Extract datetime features
+    input_df_encoded['trans_year'] = trans_date_trans_time.year
+    input_df_encoded['trans_month'] = trans_date_trans_time.month
+    input_df_encoded['trans_day'] = trans_date_trans_time.day
+    input_df_encoded['trans_hour'] = trans_date_trans_time.hour
+    
+    # List of numerical columns to scale
+    numerical_cols_to_scale = ['amt', 'merch_lat', 'merch_long', 'unix_time',
+                               'trans_year', 'trans_month', 'trans_day', 'trans_hour']
+    
+    # Scale numerical columns using the pre-fitted scaler
+    scaler = load_model('scaler_fraud.pkl')
+    input_df_encoded[numerical_cols_to_scale] = scaler.transform(input_df_encoded[numerical_cols_to_scale])
+    
+    # Ensure all model features are present
+    model_features = X_fraud_encoded.columns
+    for col in model_features:
+        if col not in input_df_encoded.columns:
+            input_df_encoded[col] = 0  # Add missing columns with default value 0
+    
+    # Reorder columns to match model's expected features
+    input_df_encoded = input_df_encoded[model_features]
+    
+    return input_df_encoded, input_dict
+
+def make_transaction_predictions(input_df):
+    probabilities = {}
+    models = [
+        ('Decision Tree Classifier', dtc_model_fraud),
+        ('Random Forest Classifier', rfc_model_fraud),
+        ('XGBoost Classifier', xgbc_model_fraud)
+    ]
+    
+    for name, model in models:
+        # Get feature names used during training
+        if hasattr(model, 'feature_names_in_'):
+            feature_names = model.feature_names_in_
+        else:
+            # For XGBoost, you may need to use model.get_booster().feature_names
+            feature_names = model.get_booster().feature_names
+        
+        # Ensure input_df has these features
+        model_input_df = input_df.copy()
+        
+        # Add missing columns with zeros
+        for col in feature_names:
+            if col not in model_input_df.columns:
+                model_input_df[col] = 0
+        
+        # Remove any extra columns not used in the model
+        model_input_df = model_input_df[feature_names]
+        
+        # Predict probability
+        y_pred = model.predict_proba(model_input_df)[0][1]
+        probabilities[name] = y_pred
+    
+    avg_probability = np.mean(list(probabilities.values()))
+    return avg_probability, probabilities
+
+# =======================
+# Tab 2: Transaction Fraud Prediction
+# =======================
+with tabs[1]:
+    st.header("Transaction Fraud Prediction")
+    
+    # Load Fraud Data
+    fraud_data = load_data('balanced_fraud_sample.csv')
+    fraud_data.reset_index(inplace=True)  # Ensure the index is a column if needed
+    
+    # Proceed only if data is loaded
+    if not fraud_data.empty:
+        # Create a list of transactions for selection
+        transactions = [
+            f"Transaction {index} - Amount: ${row['amt']} - Category: {row['category']}"
+            for index, row in fraud_data.iterrows()
+        ]
+        
+        selected_transaction_option = st.selectbox("Select a transaction", transactions)
+        
+        if selected_transaction_option:
+            # Extract the transaction index from the selected option
+            try:
+                transaction_index = int(selected_transaction_option.split(" ")[1])
+                selected_transaction = fraud_data.loc[transaction_index]
+            except (IndexError, ValueError, KeyError) as e:
+                st.error(f"Error selecting transaction: {e}")
+                st.stop()
+            
+            st.markdown("---")
+            st.header("Transaction Details")
+            
+            # Define which columns to include (exclude PII and irrelevant columns)
+            included_columns = ['amt', 'category', 'gender', 'state', 'age', 'city', 'job']
+            
+            # Adjust 'age' based on dataset
+            if 'age' not in fraud_data.columns:
+                included_columns.remove('age')
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                if 'amt' in included_columns:
+                    amt = st.number_input("Transaction Amount", min_value=0.0, value=float(selected_transaction['amt']))
+                if 'category' in included_columns:
+                    try:
+                        category_index = list(fraud_data['category'].unique()).index(selected_transaction['category'])
+                        category = st.selectbox("Category", fraud_data['category'].unique(), index=category_index)
+                    except ValueError:
+                        category = st.selectbox("Category", fraud_data['category'].unique())
+                if 'gender' in included_columns:
+                    try:
+                        gender_index = list(fraud_data['gender'].unique()).index(selected_transaction['gender'])
+                        gender = st.selectbox("Gender", fraud_data['gender'].unique(), index=gender_index)
+                    except ValueError:
+                        gender = st.selectbox("Gender", fraud_data['gender'].unique())
+                if 'state' in included_columns:
+                    try:
+                        state_index = list(fraud_data['state'].unique()).index(selected_transaction['state'])
+                        state = st.selectbox("State", fraud_data['state'].unique(), index=state_index)
+                    except ValueError:
+                        state = st.selectbox("State", fraud_data['state'].unique())
+            
+            with col2:
+                if 'age' in included_columns:
+                    try:
+                        age = st.number_input("Age", min_value=18, max_value=100, value=int(selected_transaction['age']))
+                    except ValueError:
+                        age = st.number_input("Age", min_value=18, max_value=100, value=30)
+                if 'city' in included_columns:
+                    try:
+                        city_index = list(fraud_data['city'].unique()).index(selected_transaction['city'])
+                        city = st.selectbox("City", fraud_data['city'].unique(), index=city_index)
+                    except ValueError:
+                        city = st.selectbox("City", fraud_data['city'].unique())
+                if 'job' in included_columns:
+                    try:
+                        job_index = list(fraud_data['job'].unique()).index(selected_transaction['job'])
+                        job = st.selectbox("Job", fraud_data['job'].unique(), index=job_index)
+                    except ValueError:
+                        job = st.selectbox("Job", fraud_data['job'].unique())
+                # Add more features as needed based on included_columns
+            
+            # Prepare input data
+            selected_transaction = fraud_data.loc[transaction_index]
+            trans_date_trans_time = selected_transaction.get('trans_date_trans_time', pd.Timestamp.now())
+
+            input_df, input_dict = prepare_transaction_input(
+                amt=amt,
+                category=category,
+                gender=gender,
+                state=state,
+                city=city,
+                job=job,
+                trans_date_trans_time=trans_date_trans_time,
+                merch_lat=selected_transaction['merch_lat'],
+                merch_long=selected_transaction['merch_long']
+            )
+
+            
+            # Make predictions
+            avg_probability, probabilities = make_transaction_predictions(input_df)
+            
+            # Display the results
+            st.markdown("---")
+            st.subheader("Prediction Results")
+            
+            # Display average probability
+            st.write(f"The transaction has a {avg_probability:.2%} probability of being fraudulent.")
+            
+            # Display probabilities from each model
+            fig_probs = create_model_probability_chart(probabilities)
+            st.plotly_chart(fig_probs, use_container_width=True)
